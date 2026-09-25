@@ -1,15 +1,21 @@
-"""Claude API wrapper: sends the prompt and returns validated JSON."""
+"""Model wrapper: sends the prompt to Gemini or Claude and returns validated JSON.
+
+The same system prompt and JSON schema are used for both providers, so the
+rest of the app doesn't need to know which model produced the result.
+"""
 
 from __future__ import annotations
 
 import json
 import re
 
-import anthropic
-
 from prompts import SYSTEM_PROMPT
 
-DEFAULT_MODEL = "claude-sonnet-5"
+PROVIDERS = {
+    "gemini": {"label": "Google Gemini", "default_model": "gemini-3.5-flash"},
+    "anthropic": {"label": "Anthropic Claude", "default_model": "claude-sonnet-5"},
+}
+MAX_OUTPUT_TOKENS = 8000
 VALID_CATEGORIES = {
     "masculine_coded", "feminine_coded", "age", "ability",
     "inflated_requirements", "exclusionary_language", "tone",
@@ -19,6 +25,13 @@ RETRY_MESSAGE = (
     "Return only the JSON object, with no other text."
 )
 
+# Friendly messages shown to visitors; raw API errors are never displayed.
+MSG_AUTH = "The demo's API key isn't working right now. Click **See a demo result** to see how the tool works."
+MSG_BUDGET = "The live demo has reached its usage limit for now. Click **See a demo result** to see how the tool works, or try again later."
+MSG_RATE = "The live demo is busy. Wait a minute and try again, or click **See a demo result**."
+MSG_OTHER = "Something went wrong while contacting the AI model. Please try again, or click **See a demo result**."
+MSG_UNREADABLE = "The model didn't return a readable result. Please try again."
+
 
 class OptimizerError(Exception):
     pass
@@ -26,7 +39,7 @@ class OptimizerError(Exception):
 
 def parse_response(text: str) -> dict:
     """Extract and validate the JSON object from the model's reply."""
-    cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip())
+    cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", (text or "").strip())
     start, end = cleaned.find("{"), cleaned.rfind("}")
     if start == -1 or end == -1:
         raise ValueError("No JSON object found")
@@ -53,26 +66,76 @@ def parse_response(text: str) -> dict:
     }
 
 
-def optimize(user_message: str, api_key: str, model: str = DEFAULT_MODEL) -> dict:
+# ---------- providers ----------
+
+def _call_gemini(messages: list[dict], api_key: str, model: str) -> str:
+    from google import genai
+    from google.genai import errors, types
+
+    client = genai.Client(api_key=api_key)
+    contents = [
+        types.Content(role="user" if m["role"] == "user" else "model",
+                      parts=[types.Part(text=m["content"])])
+        for m in messages
+    ]
+    try:
+        response = client.models.generate_content(
+            model=model,
+            contents=contents,
+            config=types.GenerateContentConfig(
+                system_instruction=SYSTEM_PROMPT,
+                response_mime_type="application/json",
+                max_output_tokens=MAX_OUTPUT_TOKENS,
+                automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
+            ),
+        )
+    except errors.APIError as e:
+        text = str(e).lower()
+        if e.code == 429:
+            raise OptimizerError(MSG_BUDGET if "quota" in text or "per day" in text else MSG_RATE) from e
+        if e.code in (401, 403) or "api key" in text:
+            raise OptimizerError(MSG_AUTH) from e
+        raise OptimizerError(MSG_OTHER) from e
+    except Exception as e:  # network problems and similar
+        raise OptimizerError(MSG_OTHER) from e
+    return response.text or ""
+
+
+def _call_anthropic(messages: list[dict], api_key: str, model: str) -> str:
+    import anthropic
+
     client = anthropic.Anthropic(api_key=api_key)
+    try:
+        response = client.messages.create(
+            model=model,
+            max_tokens=MAX_OUTPUT_TOKENS,
+            system=SYSTEM_PROMPT,
+            messages=messages,
+        )
+    except anthropic.AuthenticationError as e:
+        raise OptimizerError(MSG_AUTH) from e
+    except anthropic.RateLimitError as e:
+        raise OptimizerError(MSG_RATE) from e
+    except anthropic.BadRequestError as e:
+        if "credit balance" in str(e).lower():
+            raise OptimizerError(MSG_BUDGET) from e
+        raise OptimizerError(MSG_OTHER) from e
+    except Exception as e:
+        raise OptimizerError(MSG_OTHER) from e
+    return "".join(b.text for b in response.content if b.type == "text")
+
+
+_CALLERS = {"gemini": _call_gemini, "anthropic": _call_anthropic}
+
+
+def optimize(user_message: str, api_key: str, provider: str = "gemini", model: str | None = None) -> dict:
+    if provider not in _CALLERS:
+        raise OptimizerError(MSG_OTHER)
+    model = model or PROVIDERS[provider]["default_model"]
     messages = [{"role": "user", "content": user_message}]
 
     for attempt in range(2):
-        try:
-            response = client.messages.create(
-                model=model,
-                max_tokens=4000,
-                system=SYSTEM_PROMPT,
-                messages=messages,
-            )
-        except anthropic.AuthenticationError as e:
-            raise OptimizerError("The API key was rejected. Check that it's correct.") from e
-        except anthropic.RateLimitError as e:
-            raise OptimizerError("Rate limit reached. Wait a minute and try again.") from e
-        except anthropic.APIError as e:
-            raise OptimizerError(f"The Claude API returned an error: {e}") from e
-
-        text = "".join(b.text for b in response.content if b.type == "text")
+        text = _CALLERS[provider](messages, api_key, model)
         try:
             return parse_response(text)
         except (ValueError, json.JSONDecodeError):
@@ -81,4 +144,4 @@ def optimize(user_message: str, api_key: str, model: str = DEFAULT_MODEL) -> dic
                     {"role": "assistant", "content": text},
                     {"role": "user", "content": RETRY_MESSAGE},
                 ]
-    raise OptimizerError("The model didn't return a readable result. Please try again.")
+    raise OptimizerError(MSG_UNREADABLE)

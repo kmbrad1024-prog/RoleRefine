@@ -8,7 +8,7 @@ import re
 
 import streamlit as st
 
-from llm import DEFAULT_MODEL, OptimizerError, optimize
+from llm import PROVIDERS, OptimizerError, optimize
 from prompts import CULTURE_PROFILES, PROMPT_VERSION, ROLE_LEVELS, build_user_message
 from samples import DEMO_RESULT, DEMO_SAMPLE, SAMPLE_JDS
 from scoring import score
@@ -99,8 +99,14 @@ def run_demo() -> None:
 
 # ---------- sidebar ----------
 
-server_key = get_secret("ANTHROPIC_API_KEY")
-model = get_secret("MODEL", DEFAULT_MODEL)
+gemini_key = get_secret("GEMINI_API_KEY")
+anthropic_key = get_secret("ANTHROPIC_API_KEY")
+provider = get_secret("PROVIDER", "gemini" if gemini_key or not anthropic_key else "anthropic")
+if provider not in PROVIDERS:
+    provider = "gemini"
+provider_label = PROVIDERS[provider]["label"]
+server_key = gemini_key if provider == "gemini" else anthropic_key
+model = get_secret("MODEL", PROVIDERS[provider]["default_model"])
 st.session_state.setdefault("runs", 0)
 
 with st.sidebar:
@@ -111,8 +117,9 @@ with st.sidebar:
         "inflated requirements and matches your company's voice."
     )
     st.markdown(
-        "**How it works:** Claude rewrites the text using an engineered "
-        "prompt; the scorecard is computed separately in code, based on "
+        "**How it works:** an AI model (Google Gemini or Anthropic Claude) "
+        "rewrites the text using an engineered prompt; the scorecard is "
+        "computed separately in code, based on "
         "[Gaucher, Friesen & Kay (2011)](https://doi.org/10.1037/a0022530)."
     )
     st.divider()
@@ -120,14 +127,14 @@ with st.sidebar:
     if not server_key:
         st.subheader("API key")
         user_key = st.text_input(
-            "Your Anthropic API key", type="password",
+            f"Your {provider_label} API key", type="password",
             help="Used only for this session and never stored.",
         )
         st.caption("No key? Click **See a demo result** to explore the app.")
     else:
         left = MAX_RUNS_PER_SESSION - st.session_state.runs
         st.caption(f"Free runs left this session: {left}")
-    st.caption(f"Model: `{model}` · Prompt {PROMPT_VERSION}")
+    st.caption(f"Model: {provider_label} `{model}` · Prompt {PROMPT_VERSION}")
 
 api_key = user_key or server_key
 
@@ -148,6 +155,9 @@ st.selectbox(
 )
 jd_text = st.text_area("Job description", key="jd", height=280,
                        placeholder="Paste the full job description here…")
+if provider == "gemini":
+    st.caption("Live results use Google's Gemini free tier, where Google may use inputs "
+               "to improve its products. Don't paste confidential job postings.")
 
 c1, c2, c3 = st.columns(3)
 culture = c1.selectbox("Culture profile", list(CULTURE_PROFILES),
@@ -173,7 +183,7 @@ if optimize_clicked:
     elif len(jd_text) > MAX_CHARS:
         st.warning(f"That's too long. Please keep it under {MAX_CHARS:,} characters.")
     elif not api_key:
-        st.warning("Add an Anthropic API key in the sidebar, or try the demo result.")
+        st.warning("The live demo isn't set up with an API key. Add your own in the sidebar, or try the demo result.")
     elif server_key and not user_key and st.session_state.runs >= MAX_RUNS_PER_SESSION:
         st.warning("You've used all the free runs for this session. Add your own API key in the sidebar to continue.")
     elif culture == "custom" and not custom_voice.strip():
@@ -182,7 +192,7 @@ if optimize_clicked:
         message = build_user_message(jd_text, culture, role_level, company, custom_voice)
         with st.spinner("Reviewing and rewriting…"):
             try:
-                st.session_state.result = optimize(message, api_key, model)
+                st.session_state.result = optimize(message, api_key, provider, model)
                 st.session_state.original = jd_text
                 st.session_state.is_demo = False
                 if not user_key:
