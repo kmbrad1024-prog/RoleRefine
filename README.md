@@ -6,7 +6,7 @@ RoleRefine flags gender-coded, age-coded and exclusionary language in a job post
 
 It's model-agnostic: the live demo runs on **Google Gemini's free tier**, and the same prompt runs on **Anthropic Claude** by changing one setting.
 
-**[Live demo →](https://kyle-jd-optimizer.streamlit.app)** · No API key needed; click **See a demo result**.
+**[Live demo →](https://rolerefine.streamlit.app)** · No API key needed; click **See a demo result**.
 
 ---
 
@@ -80,8 +80,8 @@ Testing showed why this matters: on a community organizer posting, prompt v1 rem
 ## Run it locally
 
 ```bash
-git clone https://github.com/kmbrad1024-prog/jd-optimizer.git
-cd jd-optimizer
+git clone https://github.com/kmbrad1024-prog/RoleRefine.git
+cd RoleRefine
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
