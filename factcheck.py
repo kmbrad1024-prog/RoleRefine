@@ -32,7 +32,7 @@ MUST_KEEP = {
     "location & travel": [
         ("relocation", r"relocat\w*"),
         ("travel", r"\btravel\w*"),
-        ("commute / in-office", r"commut\w*|in[- ]office|on[- ]?site|in person|office \d|\bdays? (a|per) week in"),
+        ("commute / in-office", r"\bcommut\w*|\bin[- ]office\b|\bon[- ]?site\b|\bin person\b|\bdays? (a|per) week in\b"),
         ("driving / own vehicle", r"driver'?s licen[sc]e|\bcar\b|vehicle|reliable transportation"),
     ],
     "pay & employment type": [
@@ -59,6 +59,13 @@ NUMBER_FACT = re.compile(
 REPORTS_TO = re.compile(
     r"report(?:s|ing)? (?:directly )?(?:in)?to (?:the |a |an |our )?"
     r"((?:[A-Z][\w&/-]*\s?){1,5})"
+)
+
+# Writing systems that shouldn't appear in a rewrite unless the original uses them
+# (models occasionally emit stray characters, e.g. a Chinese word mid-paragraph).
+FOREIGN_SCRIPTS = re.compile(
+    r"[\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF\u0900-\u097F\u0E00-\u0E7F"
+    r"\u3040-\u30FF\u3400-\u4DBF\u4E00-\u9FFF\uAC00-\uD7AF]+"
 )
 
 LENGTH_TOLERANCE = 0.25
@@ -130,6 +137,16 @@ def check(original: str, rewrite: str, changes: list[dict] | None = None) -> Fac
             result.warnings.append(Warning(
                 "reporting line", title,
                 f'The original says the role reports to "{title}", but the rewrite doesn\'t.'))
+
+    unexpected = sorted({m.group(0) for m in FOREIGN_SCRIPTS.finditer(rewrite)}
+                        - {m.group(0) for m in FOREIGN_SCRIPTS.finditer(original)})
+    for chars in unexpected:
+        i = rewrite.find(chars)
+        context = rewrite[max(i - 25, 0): i + len(chars) + 25].replace("\n", " ").strip()
+        result.warnings.append(Warning(
+            "stray characters", chars,
+            f'The rewrite contains characters that aren\'t in the original: "…{context}…". '
+            "This is a model glitch; delete them before posting."))
 
     o_words, r_words = len(o.split()), len(r.split())
     if o_words:
