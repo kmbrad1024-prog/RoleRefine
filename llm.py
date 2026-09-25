@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 
 from prompts import SYSTEM_PROMPT
 
@@ -35,6 +36,14 @@ MSG_UNREADABLE = "The model didn't return a readable result. Please try again."
 
 class OptimizerError(Exception):
     pass
+
+
+def _log(provider: str, err: Exception) -> None:
+    """Record the real cause in the server logs (never shown to visitors, never includes the key)."""
+    code = getattr(err, "code", None) or getattr(err, "status_code", None)
+    detail = getattr(err, "message", None) or str(err)
+    print(f"[jd-optimizer] {provider} error {type(err).__name__} {code}: {detail}"[:1000],
+          file=sys.stderr, flush=True)
 
 
 def parse_response(text: str) -> dict:
@@ -90,6 +99,7 @@ def _call_gemini(messages: list[dict], api_key: str, model: str) -> str:
             ),
         )
     except errors.APIError as e:
+        _log("gemini", e)
         text = str(e).lower()
         if e.code == 429:
             raise OptimizerError(MSG_BUDGET if "quota" in text or "per day" in text else MSG_RATE) from e
@@ -97,6 +107,7 @@ def _call_gemini(messages: list[dict], api_key: str, model: str) -> str:
             raise OptimizerError(MSG_AUTH) from e
         raise OptimizerError(MSG_OTHER) from e
     except Exception as e:  # network problems and similar
+        _log("gemini", e)
         raise OptimizerError(MSG_OTHER) from e
     return response.text or ""
 
@@ -117,10 +128,12 @@ def _call_anthropic(messages: list[dict], api_key: str, model: str) -> str:
     except anthropic.RateLimitError as e:
         raise OptimizerError(MSG_RATE) from e
     except anthropic.BadRequestError as e:
+        _log("anthropic", e)
         if "credit balance" in str(e).lower():
             raise OptimizerError(MSG_BUDGET) from e
         raise OptimizerError(MSG_OTHER) from e
     except Exception as e:
+        _log("anthropic", e)
         raise OptimizerError(MSG_OTHER) from e
     return "".join(b.text for b in response.content if b.type == "text")
 
@@ -138,7 +151,8 @@ def optimize(user_message: str, api_key: str, provider: str = "gemini", model: s
         text = _CALLERS[provider](messages, api_key, model)
         try:
             return parse_response(text)
-        except (ValueError, json.JSONDecodeError):
+        except (ValueError, json.JSONDecodeError) as e:
+            _log(provider, e)
             if attempt == 0:
                 messages += [
                     {"role": "assistant", "content": text},
