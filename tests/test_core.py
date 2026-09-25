@@ -237,3 +237,55 @@ def test_requirements_counted_without_bullets():
           "Working at MLT\n"
           "We offer hybrid work.")
     assert count_required(jd) == 3
+
+
+# ---------- fact check ----------
+
+from factcheck import check as fact_check  # noqa: E402
+
+CADC_LIKE = (
+    "Employees must be able to commute to an office on a daily basis and have a car.\n"
+    "Organizers will report to a Regional Field Director.\n"
+    "Willingness to work long hours and weekends\n"
+    "A valid driver's license and the ability to relocate as needed.\n"
+    "Working laptop\n"
+    "This position is full-time, hourly wage position\n"
+)
+
+
+def test_fact_check_flags_dropped_working_conditions():
+    rewrite = "A valid driver's license and a car to use during the workday.\nFull-time role."
+    fc = fact_check(CADC_LIKE, rewrite)
+    facts = {w.fact for w in fc.warnings}
+    assert {"long hours / overtime", "weekends", "relocation", "commute / in-office",
+            "hourly pay", "own laptop / equipment"} <= facts
+    assert any(w.category == "reporting line" for w in fc.warnings)
+    assert "driving / own vehicle" not in facts  # kept, so no warning
+
+
+def test_fact_check_accepts_reworded_conditions():
+    rewrite = ("You'll commute to our office daily and drive your own car for outreach. "
+               "You'll report to the Regional Field Director. The schedule includes long hours "
+               "and weekends during peak periods, and you may need to relocate. Bring your own "
+               "laptop. This is a full-time, hourly role. A valid driver's license is required.")
+    assert fact_check(CADC_LIKE, rewrite).ok
+
+
+def test_fact_check_flags_changed_numbers_unless_logged():
+    original = "Requirements:\n- 5+ years of B2B sales\n- Salary range: $70,000-$85,000"
+    rewrite = "What you'll need:\n- 3+ years of B2B sales\n- Salary range: $70,000-$85,000"
+    assert [w.fact for w in fact_check(original, rewrite).warnings] == ["5+ years"]
+    logged = [{"original": "5+ years of B2B sales", "replacement": "3+ years"}]
+    assert fact_check(original, rewrite, logged).ok
+
+
+def test_fact_check_flags_big_length_change():
+    original = " ".join(["We build tools for teams."] * 40)  # 200 words
+    fc = fact_check(original, "We build tools.")
+    assert any(w.category == "length" for w in fc.warnings)
+
+
+def test_demo_result_passes_fact_check():
+    fc = fact_check(SAMPLE_JDS["Software Engineer (biased example)"],
+                    DEMO_RESULT["rewritten_jd"], DEMO_RESULT["changes"])
+    assert fc.ok, [w.detail for w in fc.warnings]
