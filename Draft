@@ -1,0 +1,7 @@
+git init
+   git add .
+   git status          # make sure secrets.toml is NOT in the list
+   git commit -m "Initial commit: JD Optimizer"
+   git branch -M main
+   git remote add origin https://github.com/YOUR-USERNAME/jd-optimizer.git
+   git push -u origin main
