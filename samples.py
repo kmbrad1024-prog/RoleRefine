@@ -55,9 +55,8 @@ DEMO_RESULT = {
 We're a growing startup looking for an experienced engineer to help us build and scale our platform. You enjoy solving hard problems, you care about quality, and you like working with a team that ships often and learns together.
 
 ## What you'll need
-- 6+ years of professional software engineering experience
-- Strong experience with Python
-- Hands-on experience with AWS
+- 10+ years of experience with Python
+- 8+ years of experience with AWS
 - Familiarity with modern web frameworks such as React
 
 ## Nice to have
@@ -79,10 +78,6 @@ You take ownership of your work, communicate clearly, and are comfortable making
          "reason": "'Work hard, play hard' can signal long hours and after-work socializing, which deters caregivers and others."},
         {"original": "dominate the market", "replacement": "build and scale our platform", "category": "masculine_coded",
          "reason": "'Dominate' is strongly masculine-coded."},
-        {"original": "10+ years of experience with Python", "replacement": "6+ years of professional software engineering experience; strong experience with Python", "category": "inflated_requirements",
-         "reason": "Very high year counts shrink the pool without predicting performance."},
-        {"original": "8+ years of experience with AWS", "replacement": "Hands-on experience with AWS", "category": "inflated_requirements",
-         "reason": "Stacking a second high year count adds little; hands-on experience is what matters."},
         {"original": "Expert in React, Go, Rust, and Kubernetes", "replacement": "Familiarity with React; Go, Rust, or Kubernetes as nice-to-haves", "category": "inflated_requirements",
          "reason": "Requiring expertise in four technologies is unrealistic; split into essentials and nice-to-haves."},
         {"original": "Bachelor's degree in Computer Science", "replacement": "A degree in Computer Science or equivalent experience (nice to have)", "category": "inflated_requirements",
@@ -104,7 +99,7 @@ You take ownership of your work, communicate clearly, and are comfortable making
         "Add a salary range; many candidates skip postings without one, and several US states require it.",
         "Add benefits, flexibility, and remote-work details.",
         "Add an equal-opportunity statement.",
-        "Confirm that 6+ years fits your needs; adjust if the role truly requires more.",
+        "10+ years of Python plus 8+ years of AWS is a very high bar that shrinks the pool; consider whether a lower minimum would still meet your needs.",
     ],
-    "summary": "Removed masculine-coded and age-signaling language, a non-essential physical requirement, and exclusionary idioms. Cut the inflated requirements list from 7 must-haves to 4, with the rest moved to nice-to-haves. The tone stays energetic and startup-casual.",
+    "summary": "Removed masculine-coded and age-signaling language, a non-essential physical requirement, and exclusionary idioms. Cut the must-have list from 7 items to 3 by moving optional skills to nice-to-haves; the stated years of experience are kept, with a suggestion to review them. The tone stays energetic and startup-casual.",
 }

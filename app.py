@@ -11,6 +11,7 @@ import streamlit as st
 from llm import PROVIDERS, OptimizerError, optimize
 from prompts import CULTURE_PROFILES, PROMPT_VERSION, ROLE_LEVELS, build_user_message
 from samples import DEMO_RESULT, DEMO_SAMPLE, SAMPLE_JDS
+from factcheck import check as fact_check
 from scoring import score
 
 MAX_CHARS = 12_000
@@ -220,6 +221,19 @@ if result:
     st.subheader("Summary")
     st.write(result["summary"])
 
+    fc = fact_check(original, rewritten, result["changes"])
+    st.subheader("Fact check")
+    if fc.ok:
+        st.success("No dropped facts found. Working conditions, pay terms, numbers and "
+                   "the reporting line all carried over.")
+    else:
+        st.warning("**Review before posting:** the rewrite may have dropped these facts "
+                   "from the original. Add them back, reworded if needed.")
+        for w in fc.warnings:
+            note = "Logged as a change." if w.logged else "Not in the change log."
+            st.markdown(f"- **{w.fact}** ({w.category}): {w.detail} _{note}_")
+    st.caption("Checked in code by comparing the original and the rewrite, not by the AI.")
+
     before, after = score(original), score(rewritten)
     st.subheader("Scorecard")
     m = st.columns(5)
@@ -282,8 +296,11 @@ if result:
         d1, d2 = st.columns(2)
         d1.download_button("Download rewrite (.md)", rewritten,
                            file_name="optimized_job_description.md", use_container_width=True)
-        report = {"original": original, **result,
-                  "scores": {"before": before.__dict__, "after": after.__dict__}}
+        report = {"original": original, **result, "prompt_version": PROMPT_VERSION,
+                  "model": f"{provider}:{model}",
+                  "scores": {"before": before.__dict__, "after": after.__dict__},
+                  "fact_check": {"length_change": round(fc.length_change, 3),
+                                 "warnings": [w.__dict__ for w in fc.warnings]}}
         d2.download_button("Download full report (.json)",
                            json.dumps(report, indent=2, default=str),
                            file_name="jd_optimizer_report.json", use_container_width=True)

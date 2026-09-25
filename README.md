@@ -41,6 +41,20 @@ The project uses a **hybrid design**:
 
 - **The LLM does the judgment calls:** rewriting in context, matching the tone and explaining each change.
 - **Plain code does the measuring:** coded-word counts, required-qualification count and reading level. LLMs are unreliable at counting, so the scorecard is computed deterministically and can be reproduced.
+- **Plain code also checks the facts:** the fact check below catches rewrites that quietly drop real parts of the job.
+
+### Guardrail: automatic fact check
+
+An inclusive rewrite is worse than useless if it hides real parts of the job. [`factcheck.py`](factcheck.py) compares the original and the rewrite, with no AI involved, and warns when any of these go missing:
+
+- **Working conditions:** long hours, weekends, shifts, travel, relocation, commuting or on-site days, driving
+- **Pay and employment type:** hourly, commission, unpaid, contract, part-time
+- **Equipment** the candidate must supply
+- **Numbers:** years of experience, pay ranges, percentages, days off. Allowed if the change is logged.
+- **The reporting line**
+- **Length:** changes of more than 25%
+
+Testing showed why this matters: on a community organizer posting, prompt v1 removed "long hours and weekends", relocation, the daily commute and the hourly pay type. The fact check flags all of them, and prompt v2 was written to prevent it.
 
 ### Prompt engineering highlights
 
@@ -51,11 +65,15 @@ The project uses a **hybrid design**:
 - **One prompt, two providers:** the same system prompt and schema run on Gemini and Claude (`llm.py`), so results can be compared across models.
 - **Few-shot example:** one full before/after pair anchors format and quality.
 - **Prompt-injection defense:** the job description is wrapped in `<job_description>` tags, and the model is told to ignore instructions inside it.
-- **Versioned:** see [`prompt_versions/`](prompt_versions/) for how the prompt evolved.
+- **Working conditions are protected:** hours, travel, relocation, on-site terms, pay type and required equipment can be reworded but never removed. Added in v2 after testing.
+- **Every removal is logged,** and stated years of experience are never changed; inflated ones are flagged as suggestions instead.
+- **Versioned and tested:** see [`prompt_versions/`](prompt_versions/). v2 fixes failures found by running v1 on real postings.
 
 ## Results
 
 > _Fill this in after testing (see "Evaluate it" below)._
+>
+> To evaluate: run real postings through the app, download each **full report (.json)** from the Export tab into `evaluation/reports/`, then run `python evaluation/run_eval.py evaluation/reports/*.json`. The script re-scores every posting with the current code and prints a results table. Reports contain third-party postings, so they're git-ignored; publish the summary only.
 >
 > Across **N** real job postings: masculine-coded words dropped from **X** to **Y** on average, other flagged phrases from **X** to **Y**, and required qualifications from **X** to **Y**. No facts were changed in **N/N** rewrites.
 
@@ -84,7 +102,7 @@ pytest
 
 1. Push this repo to GitHub.
 2. Go to [share.streamlit.io](https://share.streamlit.io) → **Create app** → pick the repo, with `app.py` as the main file.
-3. In **Advanced settings → Secrets**, paste `GEMINI_API_KEY = "AIza..."` (or `ANTHROPIC_API_KEY` plus `PROVIDER = "anthropic"`).
+3. In **Advanced settings → Secrets**, paste `GEMINI_API_KEY = "..."`. New Google keys start with `AQ.`, older ones with `AIza`. To use Claude instead, paste `ANTHROPIC_API_KEY = "..."` and add `PROVIDER = "anthropic"`.
 4. Deploy, then put the URL at the top of this README.
 
 **Cost control:** each visitor gets 10 runs per session on your key (`MAX_RUNS_PER_SESSION` in `app.py`); after that they can paste their own key. On Gemini's free tier, Google's daily quota is the hard limit, and the app shows a friendly message when it's reached. On Claude, set a monthly spend limit in the Claude Console.
@@ -96,8 +114,10 @@ app.py              Streamlit UI
 prompts.py          System prompt, culture profiles, user-message builder
 llm.py              Gemini and Claude API calls, JSON validation, retry, friendly errors
 scoring.py          Gender-coded word lists, flags, requirement count, reading level
+factcheck.py        Flags facts the rewrite may have dropped (conditions, pay, numbers)
 samples.py          Sample job descriptions and the demo-mode result
-prompt_versions/    Prompt history
+prompt_versions/    Prompt history and what each version fixed
+evaluation/         Script that summarizes results across many postings
 tests/              Unit tests (no API key needed)
 ```
 
