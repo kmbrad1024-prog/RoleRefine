@@ -1,8 +1,8 @@
-# ✍️ JD Optimizer
+# ✍️ RoleRefine
 
 **Rewrite job descriptions to reach a wider talent pool, in your company's own voice.**
 
-JD Optimizer flags gender-coded, age-coded and exclusionary language in a job posting, trims inflated requirements and rewrites it to match your company's culture. It explains every change it makes.
+RoleRefine flags gender-coded, age-coded and exclusionary language in a job posting, trims inflated requirements and rewrites it to match your company's culture. It explains every change it makes.
 
 It's model-agnostic: the live demo runs on **Google Gemini's free tier**, and the same prompt runs on **Anthropic Claude** by changing one setting.
 
@@ -14,7 +14,7 @@ It's model-agnostic: the live demo runs on **Google Gemini's free tier**, and th
 
 Wording shapes who applies. Research by [Gaucher, Friesen & Kay (2011)](https://doi.org/10.1037/a0022530) found that job ads with more masculine-coded words (such as *competitive*, *dominant* and *aggressive*) were rated as less appealing by women, and that this was driven by a lower sense of belonging, not by doubts about their ability. Age signals ("digital native"), unnecessary physical requirements and long must-have lists narrow the pool even further.
 
-Most small and mid-size companies don't have anyone reviewing postings for this. JD Optimizer does a first pass in seconds.
+Most small and mid-size companies don't have anyone reviewing postings for this. RoleRefine does a first pass in seconds.
 
 ## What it does
 

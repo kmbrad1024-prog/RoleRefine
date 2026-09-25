@@ -1,4 +1,4 @@
-"""JD Optimizer — rewrite job descriptions for inclusivity and brand voice."""
+"""RoleRefine — rewrite job descriptions for inclusivity and brand voice."""
 
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ CATEGORIES = {
     "tone": ("Tone", "#64748b"),
 }
 
-st.set_page_config(page_title="JD Optimizer", page_icon="✍️", layout="wide")
+st.set_page_config(page_title="RoleRefine", page_icon="✍️", layout="wide")
 
 st.markdown(
     """
@@ -113,7 +113,7 @@ st.session_state.setdefault("runs", 0)
 with st.sidebar:
     st.header("About")
     st.write(
-        "JD Optimizer rewrites job descriptions to reach a wider talent pool. "
+        "RoleRefine rewrites job descriptions to reach a wider talent pool. "
         "It flags gender-coded, age-coded and exclusionary language, trims "
         "inflated requirements and matches your company's voice."
     )
@@ -142,7 +142,7 @@ api_key = user_key or server_key
 
 # ---------- inputs ----------
 
-st.title("✍️ JD Optimizer")
+st.title("✍️ RoleRefine")
 st.write(
     "Paste a job description, choose your company's voice, and get an inclusive "
     "rewrite with every change explained."
@@ -303,8 +303,8 @@ if result:
                                  "warnings": [w.__dict__ for w in fc.warnings]}}
         d2.download_button("Download full report (.json)",
                            json.dumps(report, indent=2, default=str),
-                           file_name="jd_optimizer_report.json", use_container_width=True)
+                           file_name="rolerefine_report.json", use_container_width=True)
 
 st.divider()
-st.caption("JD Optimizer is a writing assistant, not legal advice. A person should "
+st.caption("RoleRefine is a writing assistant, not legal advice. A person should "
            "always review the final job description before it's posted.")

@@ -60,7 +60,7 @@ def _log(provider: str, err: Exception) -> None:
     """Record the real cause in the server logs (never shown to visitors, never includes the key)."""
     code = getattr(err, "code", None) or getattr(err, "status_code", None)
     detail = getattr(err, "message", None) or str(err)
-    print(f"[jd-optimizer] {provider} error {type(err).__name__} {code}: {detail}"[:1000],
+    print(f"[rolerefine] {provider} error {type(err).__name__} {code}: {detail}"[:1000],
           file=sys.stderr, flush=True)
 
 
