@@ -69,22 +69,80 @@ class _Block:
         self.text = text
 
 
-class _FakeClient:
+class _FakeAnthropic:
     """Returns invalid JSON first, then valid JSON, to exercise the retry."""
 
+    calls = 0  # shared across instances: the wrapper creates a client per call
+
     def __init__(self, **_):
-        self.calls = 0
         self.messages = self
 
     def create(self, **kwargs):
-        self.calls += 1
-        text = "not json" if self.calls == 1 else json.dumps(DEMO_RESULT)
+        _FakeAnthropic.calls += 1
+        text = "not json" if _FakeAnthropic.calls == 1 else json.dumps(DEMO_RESULT)
         return type("R", (), {"content": [_Block(text)]})()
 
 
-def test_optimize_retries_on_bad_json(monkeypatch):
+def test_anthropic_retries_on_bad_json(monkeypatch):
+    import anthropic
+
     import llm
 
-    monkeypatch.setattr(llm.anthropic, "Anthropic", _FakeClient)
-    out = llm.optimize("msg", api_key="test")
+    monkeypatch.setattr(anthropic, "Anthropic", _FakeAnthropic)
+    out = llm.optimize("msg", api_key="test", provider="anthropic")
     assert out["rewritten_jd"] == DEMO_RESULT["rewritten_jd"]
+
+
+class _FakeGeminiModels:
+    def __init__(self, behavior):
+        self.behavior = behavior
+        self.last_config = None
+
+    def generate_content(self, model, contents, config):
+        self.last_config = config
+        if isinstance(self.behavior, Exception):
+            raise self.behavior
+        return type("R", (), {"text": self.behavior})()
+
+
+def _fake_gemini(monkeypatch, behavior):
+    from google import genai
+
+    models = _FakeGeminiModels(behavior)
+    monkeypatch.setattr(genai, "Client", lambda api_key: type("C", (), {"models": models})())
+    return models
+
+
+def test_gemini_success_uses_json_mode_and_system_prompt(monkeypatch):
+    import llm
+    from prompts import SYSTEM_PROMPT
+
+    models = _fake_gemini(monkeypatch, json.dumps(DEMO_RESULT))
+    out = llm.optimize("msg", api_key="test", provider="gemini")
+    assert out["summary"] == DEMO_RESULT["summary"]
+    assert models.last_config.response_mime_type == "application/json"
+    assert models.last_config.system_instruction == SYSTEM_PROMPT
+
+
+def test_gemini_quota_error_is_friendly(monkeypatch):
+    from google.genai import errors
+
+    import llm
+
+    err = errors.ClientError(429, {"error": {"code": 429, "message": "Quota exceeded for requests per day", "status": "RESOURCE_EXHAUSTED"}})
+    _fake_gemini(monkeypatch, err)
+    with pytest.raises(llm.OptimizerError) as e:
+        llm.optimize("msg", api_key="test", provider="gemini")
+    assert str(e.value) == llm.MSG_BUDGET
+
+
+def test_gemini_bad_key_is_friendly(monkeypatch):
+    from google.genai import errors
+
+    import llm
+
+    err = errors.ClientError(400, {"error": {"code": 400, "message": "API key not valid. Please pass a valid API key.", "status": "INVALID_ARGUMENT"}})
+    _fake_gemini(monkeypatch, err)
+    with pytest.raises(llm.OptimizerError) as e:
+        llm.optimize("msg", api_key="test", provider="gemini")
+    assert str(e.value) == llm.MSG_AUTH
