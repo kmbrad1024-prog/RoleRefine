@@ -1,4 +1,4 @@
-"""Summarize JD Optimizer results across many postings.
+"""Summarize RoleRefine results across many postings.
 
 Usage:
     python evaluation/run_eval.py path/to/reports/*.json
