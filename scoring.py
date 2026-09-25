@@ -59,7 +59,9 @@ OTHER_FLAGS = {
 
 REQUIREMENT_HEADINGS = re.compile(
     r"(requirement|qualification|what you('ll| will) need|must[- ]have|"
-    r"what we('re| are) looking for|you have|who you are|skills)",
+    r"what we('re| are) looking for|you have|who you are|skills|"
+    r"you('ll| will)? bring|what we expect|about you|your background|"
+    r"your experience|you should have|you're a great fit|great fit if)",
     re.IGNORECASE,
 )
 NICE_TO_HAVE_HEADINGS = re.compile(
@@ -69,6 +71,23 @@ BULLET = re.compile(r"^\s*([-*•●▪◦]|\d+[.)])\s+")
 
 WORD = re.compile(r"[A-Za-z][A-Za-z'-]*")
 
+# Business terms that match a coded stem but don't carry the coded meaning
+# (e.g. sales "leads", an email "response", a "connect rate"). They're removed
+# before coded words are counted. Real coded uses ("leader", "responsive",
+# "connect with customers") still count.
+FALSE_POSITIVES = re.compile(
+    r"\b(lead(s)? (research|quality|list|lists|generation|gen|prioriti[sz]ation|scoring|source|sources|flow)"
+    r"|leads\b"
+    r"|(team|tech|technical|delivery|project|product|design|engineering|sales|account|content|data|qa|test) lead\b"
+    r"|connect(ion)? rates?"
+    r"|responsibilit(y|ies)"
+    r"|respon(se|ses|ding|d|ds) (time|times|rate|rates|within)"
+    r"|responses?\b"
+    r"|analytics"
+    r"|customer support|support (team|ticket|tickets|engineer|specialist|agent)"
+    r"|decisions are made by humans)",
+    re.IGNORECASE,
+)
 
 @dataclass
 class Score:
@@ -93,23 +112,32 @@ class Score:
 
     @property
     def balance_label(self) -> str:
+        """Balance label that accounts for posting length.
+
+        Two views must agree: the raw gap between masculine and feminine counts,
+        and the gap per 100 words. A long posting with a small raw gap, or a
+        short one with a 1-2 word gap, reads as balanced or only slightly coded.
+        """
         diff = self.masculine_count - self.feminine_count
-        if diff >= 4:
-            return "Strongly masculine-coded"
-        if diff >= 2:
-            return "Slightly masculine-coded"
-        if diff <= -4:
-            return "Strongly feminine-coded"
-        if diff <= -2:
-            return "Slightly feminine-coded"
-        return "Balanced"
+        per_100 = abs(diff) / max(self.word_count, 1) * 100
+        level_raw = 2 if abs(diff) >= 4 else 1 if abs(diff) >= 2 else 0
+        level_density = 2 if per_100 >= 1.0 else 1 if per_100 >= 0.5 else 0
+        level = min(level_raw, level_density)
+        if level == 0:
+            return "Balanced"
+        strength = "Strongly" if level == 2 else "Slightly"
+        side = "masculine" if diff > 0 else "feminine"
+        return f"{strength} {side}-coded"
 
 
 def _coded_words(words: list[str], stems: list[str]) -> list[str]:
+    """Words starting with a coded stem. Hyphenated words also check each part,
+    so "results-driven" counts as "driven"."""
     hits = []
     for w in words:
         lw = w.lower()
-        if any(lw.startswith(stem) for stem in stems):
+        candidates = [lw] + (lw.split("-") if "-" in lw else [])
+        if any(c.startswith(stem) for c in candidates for stem in stems):
             hits.append(lw)
     return hits
 
@@ -171,10 +199,11 @@ def reading_grade(text: str) -> float:
 
 def score(text: str) -> Score:
     words = WORD.findall(text)
+    coded_words = WORD.findall(FALSE_POSITIVES.sub(" ", text))
     s = Score()
     s.word_count = len(words)
-    s.masculine = _coded_words(words, MASCULINE_STEMS)
-    s.feminine = _coded_words(words, FEMININE_STEMS)
+    s.masculine = _coded_words(coded_words, MASCULINE_STEMS)
+    s.feminine = _coded_words(coded_words, FEMININE_STEMS)
     for pattern, category in OTHER_FLAGS.items():
         for m in re.finditer(pattern, text, re.IGNORECASE):
             s.other_flags.append((m.group(0), category))
