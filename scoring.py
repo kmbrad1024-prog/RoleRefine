@@ -60,7 +60,7 @@ OTHER_FLAGS = {
 REQUIREMENT_HEADINGS = re.compile(
     r"(requirement|qualification|what you('ll| will) need|must[- ]have|"
     r"what we('re| are) looking for|you have|who you are|skills|"
-    r"you('ll| will)? bring|what we expect|about you|your background|"
+    r"you('ll| will)? bring|what we expect|your background|"
     r"your experience|you should have|you're a great fit|great fit if)",
     re.IGNORECASE,
 )
@@ -85,7 +85,9 @@ FALSE_POSITIVES = re.compile(
     r"|responses?\b"
     r"|analytics"
     r"|customer support|support (team|ticket|tickets|engineer|specialist|agent)"
-    r"|decisions are made by humans)",
+    r"|(hiring |final )?decisions are (ultimately )?made by humans"
+    r"|(generally accepted )?accounting principles"
+    r"|(ai|data)-driven)",
     re.IGNORECASE,
 )
 
@@ -142,11 +144,29 @@ def _coded_words(words: list[str], stems: list[str]) -> list[str]:
     return hits
 
 
-def count_required(text: str) -> int:
-    """Count bullet points under a 'requirements'-style heading.
+def _looks_like_heading(line: str) -> bool:
+    """Short title-style lines ("What You Have", "Requirements:") are headings.
 
-    Stops at the next heading or a 'nice to have' section. Falls back to 0
-    if the JD has no recognizable requirements section.
+    Copying a posting from a web page usually drops bullet symbols, so list
+    items and headings have to be told apart by their shape instead.
+    """
+    if BULLET.match(line) or len(line) >= 60:
+        return False
+    if line.startswith("#") or line.endswith(":") or line.isupper():
+        return True
+    if line[-1] in ".;,!?":
+        return False
+    words = [w for w in re.findall(r"[A-Za-z][A-Za-z'’-]*", line) if len(w) > 3]
+    return bool(words) and len(line.split()) <= 8 and \
+        sum(w[0].isupper() for w in words) / len(words) >= 0.6
+
+
+def count_required(text: str) -> int:
+    """Count the items listed under a 'requirements'-style heading.
+
+    Each line in the section counts as one item, whether or not it kept its
+    bullet symbol. Stops at the next heading or a 'nice to have' section.
+    Returns 0 if the JD has no recognizable requirements section.
     """
     count = 0
     in_section = False
@@ -154,20 +174,13 @@ def count_required(text: str) -> int:
         line = raw.strip()
         if not line:
             continue
-        is_bullet = bool(BULLET.match(line))
-        looks_like_heading = (
-            not is_bullet
-            and len(line) < 60
-            and (line.startswith("#") or line.endswith(":") or line.isupper()
-                 or REQUIREMENT_HEADINGS.search(line) is not None)
-        )
-        if looks_like_heading:
+        if _looks_like_heading(line):
             if NICE_TO_HAVE_HEADINGS.search(line):
                 in_section = False
             else:
                 in_section = REQUIREMENT_HEADINGS.search(line) is not None
             continue
-        if in_section and is_bullet:
+        if in_section:
             count += 1
     return count
 
