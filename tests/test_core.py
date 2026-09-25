@@ -163,22 +163,22 @@ def test_gemini_bad_key_is_friendly(monkeypatch):
     assert e.value.base_message == llm.MSG_AUTH
 
 
-def test_gemini_retries_after_overload(monkeypatch):
+def test_gemini_overload_switches_to_lite_model(monkeypatch):
     import llm
 
     models = _fake_gemini(monkeypatch, [_server_error(), json.dumps(DEMO_RESULT)])
     out = llm.optimize("msg", api_key="test", provider="gemini")
     assert out["summary"] == DEMO_RESULT["summary"]
-    assert models.calls == ["gemini-3.5-flash", "gemini-3.5-flash"]
+    assert models.calls == ["gemini-3.5-flash", "gemini-3.5-flash-lite"]
 
 
-def test_gemini_falls_back_to_lite_model(monkeypatch):
+def test_gemini_lite_model_is_retried(monkeypatch):
     import llm
 
-    models = _fake_gemini(monkeypatch, [_server_error()] * 3 + [json.dumps(DEMO_RESULT)])
+    models = _fake_gemini(monkeypatch, [_server_error()] * 2 + [json.dumps(DEMO_RESULT)])
     out = llm.optimize("msg", api_key="test", provider="gemini")
     assert out["summary"] == DEMO_RESULT["summary"]
-    assert models.calls[-1] == "gemini-3.5-flash-lite"
+    assert models.calls == ["gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.5-flash-lite"]
 
 
 def test_gemini_persistent_overload_shows_code(monkeypatch):
@@ -189,7 +189,7 @@ def test_gemini_persistent_overload_shows_code(monkeypatch):
         llm.optimize("msg", api_key="test", provider="gemini")
     assert e.value.base_message == llm.MSG_OTHER
     assert "(code 503)" in str(e.value)
-    assert len(models.calls) == 6  # 3 tries on each model
+    assert len(models.calls) == 3  # 1 try on the main model, 2 on the fallback
 
 
 def test_gemini_timeout_is_retried(monkeypatch):
