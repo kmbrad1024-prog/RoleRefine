@@ -94,23 +94,37 @@ def test_anthropic_retries_on_bad_json(monkeypatch):
 
 
 class _FakeGeminiModels:
-    def __init__(self, behavior):
-        self.behavior = behavior
+    """Replays `behaviors` in order (the last one repeats); records models called."""
+
+    def __init__(self, behaviors):
+        self.behaviors = behaviors if isinstance(behaviors, list) else [behaviors]
+        self.calls = []
         self.last_config = None
 
     def generate_content(self, model, contents, config):
         self.last_config = config
-        if isinstance(self.behavior, Exception):
-            raise self.behavior
-        return type("R", (), {"text": self.behavior})()
+        b = self.behaviors[min(len(self.calls), len(self.behaviors) - 1)]
+        self.calls.append(model)
+        if isinstance(b, Exception):
+            raise b
+        return type("R", (), {"text": b})()
 
 
-def _fake_gemini(monkeypatch, behavior):
+def _fake_gemini(monkeypatch, behaviors):
     from google import genai
 
-    models = _FakeGeminiModels(behavior)
-    monkeypatch.setattr(genai, "Client", lambda api_key: type("C", (), {"models": models})())
+    import llm
+
+    monkeypatch.setattr(llm.time, "sleep", lambda s: None)
+    models = _FakeGeminiModels(behaviors)
+    monkeypatch.setattr(genai, "Client", lambda api_key, **kw: type("C", (), {"models": models})())
     return models
+
+
+def _server_error(code=503):
+    from google.genai import errors
+
+    return errors.ServerError(code, {"error": {"code": code, "message": "The model is overloaded.", "status": "UNAVAILABLE"}})
 
 
 def test_gemini_success_uses_json_mode_and_system_prompt(monkeypatch):
@@ -133,7 +147,8 @@ def test_gemini_quota_error_is_friendly(monkeypatch):
     _fake_gemini(monkeypatch, err)
     with pytest.raises(llm.OptimizerError) as e:
         llm.optimize("msg", api_key="test", provider="gemini")
-    assert str(e.value) == llm.MSG_BUDGET
+    assert e.value.base_message == llm.MSG_BUDGET
+    assert "(code 429)" in str(e.value)
 
 
 def test_gemini_bad_key_is_friendly(monkeypatch):
@@ -145,4 +160,41 @@ def test_gemini_bad_key_is_friendly(monkeypatch):
     _fake_gemini(monkeypatch, err)
     with pytest.raises(llm.OptimizerError) as e:
         llm.optimize("msg", api_key="test", provider="gemini")
-    assert str(e.value) == llm.MSG_AUTH
+    assert e.value.base_message == llm.MSG_AUTH
+
+
+def test_gemini_retries_after_overload(monkeypatch):
+    import llm
+
+    models = _fake_gemini(monkeypatch, [_server_error(), json.dumps(DEMO_RESULT)])
+    out = llm.optimize("msg", api_key="test", provider="gemini")
+    assert out["summary"] == DEMO_RESULT["summary"]
+    assert models.calls == ["gemini-3.5-flash", "gemini-3.5-flash"]
+
+
+def test_gemini_falls_back_to_lite_model(monkeypatch):
+    import llm
+
+    models = _fake_gemini(monkeypatch, [_server_error()] * 3 + [json.dumps(DEMO_RESULT)])
+    out = llm.optimize("msg", api_key="test", provider="gemini")
+    assert out["summary"] == DEMO_RESULT["summary"]
+    assert models.calls[-1] == "gemini-3.5-flash-lite"
+
+
+def test_gemini_persistent_overload_shows_code(monkeypatch):
+    import llm
+
+    models = _fake_gemini(monkeypatch, _server_error())
+    with pytest.raises(llm.OptimizerError) as e:
+        llm.optimize("msg", api_key="test", provider="gemini")
+    assert e.value.base_message == llm.MSG_OTHER
+    assert "(code 503)" in str(e.value)
+    assert len(models.calls) == 6  # 3 tries on each model
+
+
+def test_gemini_timeout_is_retried(monkeypatch):
+    import llm
+
+    models = _fake_gemini(monkeypatch, [TimeoutError("read timed out"), json.dumps(DEMO_RESULT)])
+    out = llm.optimize("msg", api_key="test", provider="gemini")
+    assert out["summary"] == DEMO_RESULT["summary"]
