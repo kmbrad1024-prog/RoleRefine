@@ -289,3 +289,14 @@ def test_demo_result_passes_fact_check():
     fc = fact_check(SAMPLE_JDS["Software Engineer (biased example)"],
                     DEMO_RESULT["rewritten_jd"], DEMO_RESULT["changes"])
     assert fc.ok, [w.detail for w in fc.warnings]
+
+
+def test_fact_check_matches_whole_words_only():
+    original = "Reply Handling \u2014 Email & LinkedIn\nPersonally owning every reply"
+    assert fact_check(original, original).ok
+    assert fact_check(original, "Reply handling for email and LinkedIn: you own every reply.").ok
+
+
+def test_fact_check_flags_stray_characters():
+    fc = fact_check("You will work across projects.", "\u73bb\u7483 You will work across projects.")
+    assert [w.category for w in fc.warnings] == ["stray characters"]
