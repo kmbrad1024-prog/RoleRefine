@@ -198,3 +198,32 @@ def test_gemini_timeout_is_retried(monkeypatch):
     models = _fake_gemini(monkeypatch, [TimeoutError("read timed out"), json.dumps(DEMO_RESULT)])
     out = llm.optimize("msg", api_key="test", provider="gemini")
     assert out["summary"] == DEMO_RESULT["summary"]
+
+
+def test_business_terms_are_not_counted_as_coded():
+    s = score("Improve lead quality and connect rates. Report to the Delivery Lead. "
+              "Reply to email responses quickly. Key responsibilities are listed below.")
+    assert s.masculine_count == 0
+    assert s.feminine_count == 0
+
+
+def test_real_coded_words_still_count():
+    s = score("You are a natural leader who is responsive and connects with customers.")
+    assert "leader" in s.masculine
+    assert {"responsive", "connects"} <= set(s.feminine)
+
+
+def test_hyphenated_words_are_checked():
+    s = score("We want a results-driven, self-reliant seller.")
+    assert {"results-driven", "self-reliant"} <= set(s.masculine)
+
+
+def test_you_bring_heading_counts_requirements():
+    jd = "What You Bring:\n* A\n* B\n* C\n\nHow We Hire:\n* Interview\n* Offer"
+    assert count_required(jd) == 3
+
+
+def test_long_posting_with_small_gap_is_balanced():
+    filler = " ".join(["the role involves planning and writing reports"] * 100)  # 700 words
+    s = score(filler + " driven competitive ambitious")
+    assert s.masculine_count == 3 and s.balance_label == "Balanced"
