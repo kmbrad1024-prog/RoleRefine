@@ -6,7 +6,7 @@ RoleRefine flags gender-coded, age-coded and exclusionary language in a job post
 
 It's model-agnostic: the live demo runs on **Google Gemini's free tier**, and the same prompt runs on **Anthropic Claude** by changing one setting.
 
-**[Live demo →](https://rolerefine.streamlit.app)** · No API key needed; click **See a demo result**.
+**[Live demo →](https://rolerefine-app.streamlit.app)** · No API key needed; click **See a demo result**.
 
 ---
 
