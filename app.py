@@ -190,7 +190,7 @@ if optimize_clicked:
         st.warning("Describe your company's voice, or pick a preset profile.")
     else:
         message = build_user_message(jd_text, culture, role_level, company, custom_voice)
-        with st.spinner("Reviewing and rewriting… this usually takes 20–40 seconds."):
+        with st.spinner("Reviewing and rewriting… this usually takes 20–40 seconds, or up to a minute when the free model is busy."):
             try:
                 st.session_state.result = optimize(message, api_key, provider, model)
                 st.session_state.original = jd_text

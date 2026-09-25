@@ -19,8 +19,10 @@ PROVIDERS = {
     "anthropic": {"label": "Anthropic Claude", "default_model": "claude-sonnet-5"},
 }
 MAX_OUTPUT_TOKENS = 8000
-RETRY_DELAYS = (2, 5)  # seconds to wait before each retry of a temporary failure
-TIMEOUT_MS = 90_000
+# When the main model is overloaded, retrying it rarely helps, so try it once
+# and then move to the lighter fallback model (tried twice).
+ATTEMPTS = {"primary": (0,), "fallback": (0, 3)}  # seconds to wait before each try
+TIMEOUT_MS = 60_000
 VALID_CATEGORIES = {
     "masculine_coded", "feminine_coded", "age", "ability",
     "inflated_requirements", "exclusionary_language", "tone",
@@ -142,8 +144,9 @@ def _call_gemini(messages: list[dict], api_key: str, model: str) -> str:
         models.append(fallback)
 
     last = None
-    for m in models:
-        for delay in (0, *RETRY_DELAYS):
+    for i, m in enumerate(models):
+        delays = ATTEMPTS["primary"] if i == 0 and len(models) > 1 else ATTEMPTS["fallback"]
+        for delay in delays:
             if delay:
                 time.sleep(delay)
             try:
