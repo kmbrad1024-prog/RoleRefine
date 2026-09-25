@@ -227,3 +227,13 @@ def test_long_posting_with_small_gap_is_balanced():
     filler = " ".join(["the role involves planning and writing reports"] * 100)  # 700 words
     s = score(filler + " driven competitive ambitious")
     assert s.masculine_count == 3 and s.balance_label == "Balanced"
+
+
+def test_requirements_counted_without_bullets():
+    jd = ("What You Have\n"
+          "Bachelor's degree required.\n"
+          "Minimum of 2-4 years of experience in nonprofit accounting.\n"
+          "Proficiency in accounting software such as QuickBooks\n"
+          "Working at MLT\n"
+          "We offer hybrid work.")
+    assert count_required(jd) == 3
