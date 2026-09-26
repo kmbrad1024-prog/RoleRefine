@@ -300,3 +300,60 @@ def test_fact_check_matches_whole_words_only():
 def test_fact_check_flags_stray_characters():
     fc = fact_check("You will work across projects.", "\u73bb\u7483 You will work across projects.")
     assert [w.category for w in fc.warnings] == ["stray characters"]
+
+
+# ---------- v3 checks ----------
+
+def _cats(fc):
+    return [w.category for w in fc.warnings]
+
+
+def test_fact_check_flags_preferred_made_required():
+    original = ("## Requirements\n- Strong customer service skills\n\n"
+                "## Preferred\n- Two years of cafe or restaurant experience\n")
+    rewrite = ("## What you'll bring\n- Strong customer service skills\n"
+               "- Two years of cafe or restaurant experience\n")
+    assert "requirement level" in _cats(fact_check(original, rewrite))
+    kept = ("## What you'll bring\n- Strong customer service skills\n\n"
+            "## Nice to have\n- Two years of cafe or restaurant experience\n")
+    assert "requirement level" not in _cats(fact_check(original, kept))
+
+
+def test_fact_check_flags_deleted_requirements():
+    items = [f"- Skill number {w}" for w in "alpha beta gamma delta epsilon zeta".split()]
+    original = "## Requirements\n" + "\n".join(items)
+    rewrite = "## Requirements\n" + "\n".join(items[:2])
+    assert "requirements" in _cats(fact_check(original, rewrite))
+    assert "requirements" not in _cats(fact_check(original, original))
+
+
+def test_fact_check_flags_invented_title():
+    original = "# Full-Stack Engineer\nYou will build our product."
+    rewrite = "# Senior Full-Stack Engineer\nYou will build our product."
+    assert _cats(fact_check(original, rewrite)) == ["job title"]
+
+
+def test_fact_check_flags_dropped_client_name_not_headings():
+    original = ("## Field Experience\nYou will staff the café inside the Amazon office. "
+                "Guests at the Amazon campus expect fast service.\n"
+                "## Field Experience\nExperience with experience is good.")
+    rewrite = "## Your experience\nYou will staff the café inside a corporate office."
+    fc = fact_check(original, rewrite)
+    assert [w.fact for w in fc.warnings if w.category == "names"] == ["Amazon"]
+
+
+def test_fact_check_flags_accommodation_on_non_physical_line():
+    original = "- Valid driver's license\n- Lift 25 lbs"
+    rewrite = ("- Valid driver's license, with or without reasonable accommodation\n"
+               "- Lift 25 lbs")
+    assert "accommodation wording" in _cats(fact_check(original, rewrite))
+    physical = "- Valid driver's license\n- Lift 25 lbs, with or without reasonable accommodation"
+    assert "accommodation wording" not in _cats(fact_check(original, physical))
+
+
+def test_fact_check_flags_harder_to_read_rewrite():
+    original = " ".join(["You talk to people. You fix bugs. You ship code."] * 5)
+    rewrite = " ".join(["You will collaboratively architect sophisticated, maintainable "
+                        "infrastructure, communicating technical considerations "
+                        "comprehensively to organizational stakeholders."] * 3)
+    assert "readability" in _cats(fact_check(original, rewrite))
