@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/logo.png" alt="RoleRefine" width="220"></p>
+
 # RoleRefine
 
 **Rewrite job descriptions to reach a wider talent pool, in your company's own voice.**
@@ -134,6 +136,7 @@ llm.py              Gemini and Claude API calls, JSON validation, retry, friendl
 scoring.py          Gender-coded word lists, flags, requirement count, reading level
 factcheck.py        Flags facts the rewrite may have dropped or changed (conditions, pay, numbers, titles, requirements)
 samples.py          Sample job descriptions and the demo-mode result
+assets/             Logo and favicon
 prompt_versions/    Prompt history and what each version fixed
 evaluation/         Script that summarizes results across many postings
 tests/              Unit tests (no API key needed)

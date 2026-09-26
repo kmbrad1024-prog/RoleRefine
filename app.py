@@ -5,6 +5,7 @@ from __future__ import annotations
 import html
 import json
 import re
+from pathlib import Path
 
 import streamlit as st
 
@@ -14,6 +15,7 @@ from samples import DEMO_RESULT, DEMO_SAMPLE, SAMPLE_JDS
 from factcheck import check as fact_check
 from scoring import score
 
+ASSETS = Path(__file__).parent / "assets"
 MAX_CHARS = 12_000
 MAX_RUNS_PER_SESSION = 10  # protects the owner's API key on a public demo
 
@@ -27,7 +29,7 @@ CATEGORIES = {
     "tone": ("Tone", "#64748b"),
 }
 
-st.set_page_config(page_title="RoleRefine", page_icon=":material/edit_document:", layout="wide")
+st.set_page_config(page_title="RoleRefine", page_icon=str(ASSETS / "favicon.png"), layout="wide")
 
 st.markdown(
     """
@@ -142,7 +144,7 @@ api_key = user_key or server_key
 
 # ---------- inputs ----------
 
-st.title("RoleRefine")
+st.image(str(ASSETS / "logo.png"), width=180)
 st.markdown("##### Inclusive job description editor")
 st.write(
     "Paste a job description, choose your company's voice, and get an inclusive "
