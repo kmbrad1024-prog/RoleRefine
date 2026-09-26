@@ -1,4 +1,5 @@
 [theme]
+base = "light"  # the logo is black, so keep a light background
 primaryColor = "#4f46e5"
 font = "sans serif"
 
