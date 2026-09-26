@@ -61,11 +61,11 @@ REQUIREMENT_HEADINGS = re.compile(
     r"(requirement|qualification|what you('ll| will) need|must[- ]have|"
     r"what we('re| are) looking for|you have|who you are|skills|"
     r"you('ll| will)? bring|what we expect|your background|"
-    r"your experience|you should have|you're a great fit|great fit if)",
+    r"your experience|you should have|you're a great fit|great fit if|^required\b|^education\b|^experience\b)",
     re.IGNORECASE,
 )
 NICE_TO_HAVE_HEADINGS = re.compile(
-    r"(nice[- ]to[- ]have|preferred|bonus|plus)", re.IGNORECASE
+    r"(nice[- ]to[- ]have|preferred|bonus|plus|set you apart|stand out)", re.IGNORECASE
 )
 BULLET = re.compile(r"^\s*([-*•●▪◦]|\d+[.)])\s+")
 
@@ -161,28 +161,41 @@ def _looks_like_heading(line: str) -> bool:
         sum(w[0].isupper() for w in words) / len(words) >= 0.6
 
 
-def count_required(text: str) -> int:
-    """Count the items listed under a 'requirements'-style heading.
+def _count_section_items(text: str) -> tuple[int, int]:
+    """Count items under requirements-style and nice-to-have-style headings.
 
-    Each line in the section counts as one item, whether or not it kept its
-    bullet symbol. Stops at the next heading or a 'nice to have' section.
-    Returns 0 if the JD has no recognizable requirements section.
+    Each line in a section counts as one item, whether or not it kept its
+    bullet symbol. A section ends at the next heading.
     """
-    count = 0
-    in_section = False
+    required = optional = 0
+    section = None
     for raw in text.splitlines():
         line = raw.strip()
         if not line:
             continue
         if _looks_like_heading(line):
             if NICE_TO_HAVE_HEADINGS.search(line):
-                in_section = False
+                section = "optional"
+            elif REQUIREMENT_HEADINGS.search(line.lstrip("#").strip()):
+                section = "required"
             else:
-                in_section = REQUIREMENT_HEADINGS.search(line) is not None
+                section = None
             continue
-        if in_section:
-            count += 1
-    return count
+        if section == "required":
+            required += 1
+        elif section == "optional":
+            optional += 1
+    return required, optional
+
+
+def count_required(text: str) -> int:
+    """Number of items listed under a 'requirements'-style heading (0 if none)."""
+    return _count_section_items(text)[0]
+
+
+def count_optional(text: str) -> int:
+    """Number of items listed under a 'nice to have'-style heading (0 if none)."""
+    return _count_section_items(text)[1]
 
 
 def _syllables(word: str) -> int:

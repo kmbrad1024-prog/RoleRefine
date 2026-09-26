@@ -1,4 +1,4 @@
-# ✍️ RoleRefine
+# RoleRefine
 
 **Rewrite job descriptions to reach a wider talent pool, in your company's own voice.**
 
@@ -7,6 +7,15 @@ RoleRefine flags gender-coded, age-coded and exclusionary language in a job post
 It's model-agnostic: the live demo runs on **Google Gemini's free tier**, and the same prompt runs on **Anthropic Claude** by changing one setting.
 
 **[Live demo →](https://rolerefine-app.streamlit.app)** · No API key needed; click **See a demo result**.
+
+## How to use it
+
+- Paste a job description, or pick a sample.
+- Choose a culture profile, the role level and (optionally) your company name.
+- Click **Optimize**. Results appear in about 20–40 seconds.
+- Read the **Fact check** first and add back anything it flags.
+- Review the rewrite in **Side by side**, the reasons in **Changes**, and **Suggestions** for things only you can add.
+- Copy or download the result from **Export**. A person should always review it before posting.
 
 ---
 
@@ -54,6 +63,14 @@ An inclusive rewrite is worse than useless if it hides real parts of the job. [`
 - **The reporting line**
 - **Length:** changes of more than 25%
 
+Added in v3, it also warns when the rewrite quietly changes the job in other ways:
+
+- A **preferred** qualification becomes **required**
+- Fewer than 70% of the listed **requirements** survive
+- The **job title** changes, or a **company or client name** disappears
+- **Accommodation wording** is added to a license, location or travel requirement
+- The rewrite is noticeably **harder to read** than the original
+
 Testing showed why this matters: on a community organizer posting, prompt v1 removed "long hours and weekends", relocation, the daily commute and the hourly pay type. The fact check flags all of them, and prompt v2 was written to prevent it.
 
 ### Prompt engineering highlights
@@ -67,7 +84,8 @@ Testing showed why this matters: on a community organizer posting, prompt v1 rem
 - **Prompt-injection defense:** the job description is wrapped in `<job_description>` tags, and the model is told to ignore instructions inside it.
 - **Working conditions are protected:** hours, travel, relocation, on-site terms, pay type and required equipment can be reworded but never removed. Added in v2 after testing.
 - **Every removal is logged,** and stated years of experience are never changed; inflated ones are flagged as suggestions instead.
-- **Versioned and tested:** see [`prompt_versions/`](prompt_versions/). v2 fixes failures found by running v1 on real postings.
+- **Titles, names and requirement levels are protected** (v3): no invented seniority, no dropped client names, preferred stays preferred, duties are moved rather than deleted, and frequencies stay exact.
+- **Versioned and tested:** see [`prompt_versions/`](prompt_versions/). Each version fixes failures found by running the previous one on real postings: v2 stopped dropped working conditions, v3 stopped quieter changes to the job.
 
 ## Results
 
@@ -114,7 +132,7 @@ app.py              Streamlit UI
 prompts.py          System prompt, culture profiles, user-message builder
 llm.py              Gemini and Claude API calls, JSON validation, retry, friendly errors
 scoring.py          Gender-coded word lists, flags, requirement count, reading level
-factcheck.py        Flags facts the rewrite may have dropped (conditions, pay, numbers)
+factcheck.py        Flags facts the rewrite may have dropped or changed (conditions, pay, numbers, titles, requirements)
 samples.py          Sample job descriptions and the demo-mode result
 prompt_versions/    Prompt history and what each version fixed
 evaluation/         Script that summarizes results across many postings

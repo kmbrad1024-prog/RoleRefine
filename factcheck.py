@@ -18,6 +18,9 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
+from scoring import (NICE_TO_HAVE_HEADINGS, REQUIREMENT_HEADINGS, _looks_like_heading,
+                     count_optional, count_required, reading_grade)
+
 # Each concept: label shown to the user, and a regex. A concept "survives" if the
 # rewrite matches the same regex (so rewording like "weekends" -> "weekend
 # shifts" is fine).
@@ -68,6 +71,29 @@ FOREIGN_SCRIPTS = re.compile(
     r"\u3040-\u30FF\u3400-\u4DBF\u4E00-\u9FFF\uAC00-\uD7AF]+"
 )
 
+# Words that mark a qualification as optional.
+PREFERRED = re.compile(r"\b(strongly preferred|preferred|is a plus|a plus|nice to have|"
+                       r"bonus|desired|ideally)\b", re.IGNORECASE)
+
+# Accommodation wording belongs with physical tasks, not with licenses,
+# credentials, location or travel.
+NON_PHYSICAL = re.compile(r"licen[sc]e|certif|degree|diploma|travel|relocat|reside|"
+                          r"located|commut|in[- ]person|on[- ]site", re.IGNORECASE)
+
+# Capitalized words that aren't names of employers, clients or products.
+NOT_NAMES = {
+    "I", "AI", "CEO", "CTO", "HR", "US", "USA", "EU", "UK", "NYC", "API", "APIs", "SQL",
+    "The", "This", "You", "Your", "We", "Our", "And", "Or", "For", "With", "In", "On",
+    "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday",
+    "Manager", "Director", "Lead", "Team", "Senior", "Junior", "Associate", "Coordinator",
+    "Equal", "Opportunity", "Employer",
+}
+MIN_NAME_MENTIONS = 2
+
+REQUIREMENTS_KEPT = 0.7       # warn if fewer than 70% of listed qualifications survive
+READABILITY_JUMP = 1.5        # grade levels
+READABILITY_CEILING = 10.0    # only warn if the rewrite ends up at or above this grade
+
 LENGTH_TOLERANCE = 0.25
 MIN_WORDS_FOR_LENGTH_CHECK = 100
 
@@ -101,6 +127,78 @@ def _logged(term_regex: str, changes: list[dict]) -> bool:
 def _number_core(s: str) -> str:
     """'2+ years' -> '2', '$70,000–$85,000' -> '70000 85000': compare the digits only."""
     return " ".join(re.findall(r"\d+", s.replace(",", "")))
+
+
+def _content_words(text: str) -> set[str]:
+    return {w for w in re.findall(r"[a-z][a-z'+#.-]{3,}", text.lower())
+            if w not in {"with", "that", "this", "your", "have", "from", "will", "and/or"}}
+
+
+def _lines_with_sections(text: str) -> list[tuple[str, str | None]]:
+    """(line, section) pairs, where section is 'required', 'optional' or None."""
+    out, section = [], None
+    for raw in text.splitlines():
+        line = raw.strip().lstrip("-*•·●▪◦ ").strip()
+        if not line:
+            continue
+        if _looks_like_heading(raw.strip()):
+            h = raw.strip().lstrip("#").strip()
+            section = ("optional" if NICE_TO_HAVE_HEADINGS.search(h)
+                       else "required" if REQUIREMENT_HEADINGS.search(h) else None)
+            continue
+        out.append((line, section))
+    return out
+
+
+def _preferred_made_required(original: str, rewrite: str) -> list[str]:
+    """Qualifications the original marked as optional that the rewrite lists as required."""
+    rewrite_lines = _lines_with_sections(rewrite)
+    hits = []
+    for line, section in _lines_with_sections(original):
+        if not (PREFERRED.search(line) or section == "optional"):
+            continue
+        words = _content_words(PREFERRED.sub(" ", line))
+        if len(words) < 3:
+            continue
+        best, best_section, best_overlap = None, None, 0.0
+        for r_line, r_section in rewrite_lines:
+            overlap = len(words & _content_words(r_line)) / len(words)
+            if overlap > best_overlap:
+                best, best_section, best_overlap = r_line, r_section, overlap
+        if best and best_overlap >= 0.6 and best_section == "required" and not PREFERRED.search(best):
+            hits.append(line)
+    return hits
+
+
+def _names(text: str) -> dict[str, int]:
+    """Capitalized words used mid-sentence (likely employer, client or product names)."""
+    found = re.findall(r"(?<=[a-z,] )([A-Z][A-Za-z0-9&.'-]+)", text)
+    # Words in headings or at the start of a line are capitalized for layout, not
+    # because they're names; words also used in lowercase are ordinary words.
+    layout_words = set()
+    for raw in text.splitlines():
+        line = raw.strip().lstrip("#-*•·●▪◦ ").strip()
+        if not line:
+            continue
+        words = re.findall(r"[A-Za-z0-9&.'-]+", line)
+        layout_words.add(words[0] if words else "")
+        if _looks_like_heading(raw.strip()):
+            layout_words.update(words)
+    lower_words = set(re.findall(r"\b[a-z][a-z'-]+\b", text))
+    counts: dict[str, int] = {}
+    for name in {n.rstrip(".'") for n in found}:
+        if (name in NOT_NAMES or len(name) < 3 or name in layout_words
+                or name.lower() in lower_words):
+            continue
+        counts[name] = len(re.findall(r"\b" + re.escape(name), text))
+    return counts
+
+
+def _title(text: str) -> str:
+    for raw in text.splitlines():
+        if raw.strip().startswith("#"):
+            return raw.strip().lstrip("#").strip()
+    return ""
 
 
 def check(original: str, rewrite: str, changes: list[dict] | None = None) -> FactCheck:
@@ -147,6 +245,54 @@ def check(original: str, rewrite: str, changes: list[dict] | None = None) -> Fac
             "stray characters", chars,
             f'The rewrite contains characters that aren\'t in the original: "…{context}…". '
             "This is a model glitch; delete them before posting."))
+
+    # --- v3 checks: quieter ways a rewrite can change the job ---
+
+    for line in _preferred_made_required(original, rewrite):
+        short = line if len(line) <= 90 else line[:87] + "…"
+        result.warnings.append(Warning(
+            "requirement level", short,
+            f'The original lists "{short}" as preferred, but the rewrite makes it required.'))
+
+    before_items = count_required(original) + count_optional(original)
+    after_items = count_required(rewrite) + count_optional(rewrite)
+    if before_items >= 5 and after_items < before_items * REQUIREMENTS_KEPT:
+        result.warnings.append(Warning(
+            "requirements", f"{before_items} → {after_items}",
+            f"The original lists {before_items} qualifications; the rewrite lists {after_items}. "
+            "Requirements should be moved or reworded, not deleted."))
+
+    title = _title(rewrite)
+    if title and title.lower() not in original.lower():
+        result.warnings.append(Warning(
+            "job title", title,
+            f'The rewrite uses the title "{title}", which doesn\'t appear in the original.',
+            logged=any(title.lower() in c.get("replacement", "").lower() for c in changes)))
+
+    already = " ".join(w.fact for w in result.warnings if w.category == "reporting line")
+    for name, mentions in sorted(_names(original).items()):
+        if mentions >= MIN_NAME_MENTIONS and name not in rewrite and name not in already:
+            result.warnings.append(Warning(
+                "names", name,
+                f'"{name}" appears {mentions} times in the original but not in the rewrite.',
+                logged=_logged(re.escape(name.lower()), changes)))
+
+    if "reasonable accommodation" not in o:
+        for raw in rewrite.splitlines():
+            if "reasonable accommodation" in raw.lower() and NON_PHYSICAL.search(raw):
+                short = raw.strip().lstrip("-* ").strip()
+                short = short if len(short) <= 90 else short[:87] + "…"
+                result.warnings.append(Warning(
+                    "accommodation wording", short,
+                    "Accommodation wording was added to a license, location or travel "
+                    f'requirement, where it doesn\'t apply: "{short}".'))
+
+    grade_before, grade_after = reading_grade(original), reading_grade(rewrite)
+    if grade_after - grade_before > READABILITY_JUMP and grade_after >= READABILITY_CEILING:
+        result.warnings.append(Warning(
+            "readability", f"grade {grade_before} → {grade_after}",
+            f"The rewrite is harder to read than the original (reading grade {grade_before} → "
+            f"{grade_after}). Shorter sentences and plainer words would help."))
 
     o_words, r_words = len(o.split()), len(r.split())
     if o_words:

@@ -27,7 +27,7 @@ CATEGORIES = {
     "tone": ("Tone", "#64748b"),
 }
 
-st.set_page_config(page_title="RoleRefine", page_icon="✍️", layout="wide")
+st.set_page_config(page_title="RoleRefine", page_icon=":material/edit_document:", layout="wide")
 
 st.markdown(
     """
@@ -142,11 +142,26 @@ api_key = user_key or server_key
 
 # ---------- inputs ----------
 
-st.title("✍️ RoleRefine")
+st.title("RoleRefine")
+st.markdown("##### Inclusive job description editor")
 st.write(
     "Paste a job description, choose your company's voice, and get an inclusive "
     "rewrite with every change explained."
 )
+
+with st.expander("How to use RoleRefine", expanded=not st.session_state.get("result")):
+    st.markdown(
+        """
+- **Add a job description.** Paste the full posting into the box, or pick one from **Start from a sample**.
+- **Set the context.** Choose a **culture profile** for the tone, the **role level**, and optionally your **company name**.
+- **Click Optimize.** The rewrite appears below in about 20–40 seconds.
+- **Check the Fact check first.** If it lists anything, the rewrite may have dropped or changed a real part of the job. Add it back before posting.
+- **Review the results.** Compare versions in **Side by side**, see why each edit was made in **Changes**, and read **Suggestions** for things only you can add (like a salary range).
+- **Copy or download** the final version from the **Export** tab.
+- **Always have a person review** the posting before it goes live, and don't paste confidential postings.
+- **No API key?** Click **See a demo result** to see how it works.
+"""
+    )
 
 st.selectbox(
     "Start from a sample (optional)",
