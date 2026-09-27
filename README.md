@@ -93,11 +93,43 @@ Testing showed why this matters: on a community organizer posting, prompt v1 rem
 
 ## Results
 
-> _Fill this in after testing (see "Evaluate it" below)._
->
-> To evaluate: run real postings through the app, download each **full report (.json)** from the Export tab into `evaluation/reports/`, then run `python evaluation/run_eval.py evaluation/reports/*.json`. The script re-scores every posting with the current code and prints a results table. Reports contain third-party postings, so they're git-ignored; publish the summary only.
->
-> Across **N** real job postings: masculine-coded words dropped from **X** to **Y** on average, other flagged phrases from **X** to **Y**, and required qualifications from **X** to **Y**. No facts were changed in **N/N** rewrites.
+I tested each prompt version on real, public job postings, choosing ones with known problems: gendered or age-coded language, inflated requirements and demanding working conditions. Every rewrite was re-checked with the current fact check, so the numbers below are comparable across versions. Postings are described by role, not by company.
+
+**Fact-check warnings per rewrite** (lower is better; – means not run on that version):
+
+| Posting | v1 | v2 | v3 | v3.1 |
+|---|---|---|---|---|
+| Community organizer | 9 | 1 | – | 2 |
+| Café operations supervisor | – | 3 | – | 0 |
+| Full-stack engineer | – | 3 | – | 0 |
+| Founding marketer | – | 2 | – | 0 |
+| Venture development trainee | – | – | 3 | 0 |
+| Operations generalist | – | – | 1 | 2 |
+| Founding engineer | – | – | 0 | 0 |
+| Retail store associate | – | – | 3 | 1 |
+| **Average** | **9** | **2.25** | **1.75** | **0.6** |
+
+**What each version fixed**
+
+- **v1 → v2:** v1 made a community organizer posting sound friendlier by deleting "long hours and weekends", relocation, the daily commute, the hourly pay type and the reporting line. v2 keeps every working condition, reworded but never removed.
+- **v2 → v3:** v2 still changed jobs in quieter ways. It made a preferred qualification required, cut 14 qualifications to 7, dropped a client's name, invented "Senior" in a job title and made an easy-to-read posting harder to read. v3 added rules and checks for all of these; re-tested on v3.1, the café and engineering postings went from 3 warnings each to 0.
+- **v3 → v3.1:** v3 started *adding* details the employer never gave, such as "per month" on a salary, "temporary", "team events" and "evenings and weekends". It also softened duties ("drive sales" became "support efforts to drive sales"). On re-test, v3.1 dropped all four added details and kept the retail posting's duties at full strength. It now asks about unclear details (such as whether a salary is monthly) in its suggestions instead.
+
+**Across the 8 v3.1 rewrites**
+
+- **Every working condition was kept**, including 60–70 hour weeks, six-day weeks, living near the office, relocation, a 21+ age minimum and a 49 lb lifting requirement.
+- **5 of 8 passed the fact check with no warnings.**
+- **Age signals and jargon** flagged by the scorer fell from 5 to 1. The worst phrases were outside the research word lists ("hardcore A-players", "the role I would have killed for at 22", "gamble your life into greatness", a joke perk) and were rewritten and logged.
+- **Postings that were already inclusive got light edits.** The strongest engineering posting got a single formatting change, where v2 had introduced three problems.
+
+**What's still open (next steps)**
+
+- **Readability:** the average reading grade rose from 9.1 to 10.1. The professional voice in particular pushes toward formal wording.
+- **Job titles:** 2 of 8 rewrites added or changed a title ("Community Organizer"). The fact check flags both.
+- **Overcorrection:** some rewrites replace masculine-coded words with too many "support" and "collaborative" words.
+- **Small losses:** client acronyms mentioned once (e.g. national campaign committees) can be dropped, and one rewrite expanded an abbreviation wrongly. The masculine-coded word count barely moved (29 → 28), because most of the coded words in these postings were mild ("leader", "decisions") and describe the actual job.
+
+To reproduce: run postings through the app, download each **full report (.json)** from the Export tab into `evaluation/reports/`, then run `python evaluation/run_eval.py evaluation/reports/*.json`. Reports contain third-party postings, so they're git-ignored; only this summary is published.
 
 ## Run it locally
 

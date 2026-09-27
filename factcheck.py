@@ -204,7 +204,7 @@ def _names(text: str) -> dict[str, int]:
         if (name in NOT_NAMES or len(name) < 3 or name in layout_words
                 or name.lower() in lower_words):
             continue
-        counts[name] = len(re.findall(r"\b" + re.escape(name), text))
+        counts[name] = len(re.findall(r"\b" + re.escape(name) + r"\b", text))
     return counts
 
 
