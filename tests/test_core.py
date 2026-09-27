@@ -357,3 +357,55 @@ def test_fact_check_flags_harder_to_read_rewrite():
                         "infrastructure, communicating technical considerations "
                         "comprehensively to organizational stakeholders."] * 3)
     assert "readability" in _cats(fact_check(original, rewrite))
+
+
+# ---------- v3.1 checks ----------
+
+def test_decimal_percentages_match_across_formats():
+    original = "Compensation: $250K - $350K plus 0.25% – 0.5% equity"
+    assert fact_check(original, "Pay: $250k-$350k base + 0.25-0.5% equity").ok
+
+
+def test_good_fit_heading_counts_as_requirements():
+    jd = "You might be a good fit if you are:\n- Strong in React\n- Strong in SQL\n\nCompensation:\n- $100k"
+    assert count_required(jd) == 2
+
+
+def test_sentence_lead_in_keeps_the_section():
+    jd = ("### What you'll need\nPeople from these backgrounds tend to thrive:\n- Ops experience\n"
+          "- Consulting experience\n\n### Nice to have\n- SQL")
+    assert count_required(jd) == 2
+
+
+def test_tend_to_work_list_promoted_to_required_is_flagged():
+    original = ("Backgrounds That Tend to Work\nPeople from these backgrounds tend to thrive:\n"
+                "2-4 years at a top startup in an operations role\n"
+                "Top consulting where you actually owned outcomes\n"
+                "Anyone who has run a small business themselves\n")
+    rewrite = ("### What you'll need\n- 2-4 years at a top startup in an operations role\n"
+               "- Top consulting where you actually owned outcomes\n"
+               "- Anyone who has run a small business themselves\n")
+    warnings = [w for w in fact_check(original, rewrite).warnings if w.category == "requirement level"]
+    assert len(warnings) == 1 and warnings[0].fact == "3 items"
+
+
+def test_age_flags_early_career_and_fresh_graduates_only():
+    cats = [c for _, c in score("We hire early-career people and fresh graduates.").other_flags]
+    assert cats.count("age") == 2
+    assert not score("You'll take on fresh challenges every day.").other_flags
+
+
+def test_reformatted_title_is_not_flagged():
+    original = "Liquor Store Associate, Palm Harbor, #1169\nYou will run the store."
+    rewrite = "# Liquor Store Associate — Palm Harbor, FL (Store #1169)\nYou will run the store."
+    assert "job title" not in _cats(fact_check(original, rewrite))
+
+
+def test_fact_check_flags_added_details():
+    original = "Salary: about €2,100. Perks: free dinners. Must have a flexible schedule."
+    rewrite = ("Salary: about €2,100 per month. Perks: free dinners and team events. "
+               "Must have a flexible schedule, including evenings and weekends.")
+    facts = {w.fact for w in fact_check(original, rewrite).warnings if w.category == "added details"}
+    assert facts == {"per month", "team events", "evenings, weekends"}
+    reworded = "Full time role. Salary: about €2,100."
+    assert "added details" not in _cats(fact_check("Full-Time role. Salary: about €2,100.", reworded))
