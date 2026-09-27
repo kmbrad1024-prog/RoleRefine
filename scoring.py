@@ -53,7 +53,8 @@ OTHER_FLAGS = {
     r"\bdigital natives?\b": "age",
     r"\byoung\b": "age",
     r"\brecent (college )?grad(uate)?s?\b": "age",
-    r"\bfresh\b": "age",
+    r"\bfresh (grad(uate)?s?|out of (school|college|university)|talent|faces?|blood)\b": "age",
+    r"\bearly[- ]career\b|\bearly in (your|their) careers?\b": "age",
     r"\bable to lift\b|\bstand for long periods\b|\bmust (be able to )?drive\b": "ability",
 }
 
@@ -61,11 +62,12 @@ REQUIREMENT_HEADINGS = re.compile(
     r"(requirement|qualification|what you('ll| will) need|must[- ]have|"
     r"what we('re| are) looking for|you have|who you are|skills|"
     r"you('ll| will)? bring|what we expect|your background|"
-    r"your experience|you should have|you're a great fit|great fit if|^required\b|^education\b|^experience\b)",
+    r"your experience|you should have|you're a great fit|(good|great|strong) fit\b|^required\b|^education\b|^experience\b)",
     re.IGNORECASE,
 )
 NICE_TO_HAVE_HEADINGS = re.compile(
-    r"(nice[- ]to[- ]have|preferred|bonus|plus|set you apart|stand out)", re.IGNORECASE
+    r"(nice[- ]to[- ]have|preferred|bonus|plus|set you apart|stand out|"
+    r"tends? to (work|thrive)|backgrounds that)", re.IGNORECASE
 )
 BULLET = re.compile(r"^\s*([-*•●▪◦]|\d+[.)])\s+")
 
@@ -161,6 +163,27 @@ def _looks_like_heading(line: str) -> bool:
         sum(w[0].isupper() for w in words) / len(words) >= 0.6
 
 
+def _is_sub_intro(line: str) -> bool:
+    """A sentence-style lead-in ending in a colon, e.g. "People from these
+    backgrounds tend to thrive:". Inside a section it introduces more items
+    rather than starting a new section."""
+    words = re.findall(r"[A-Za-z][A-Za-z'’-]*", line)
+    long_words = [w for w in words if len(w) > 3]
+    return (line.endswith(":") and not line.startswith("#") and len(words) >= 5
+            and bool(long_words) and sum(w[0].isupper() for w in long_words) / len(long_words) < 0.6)
+
+
+def next_section(line: str, current: str | None) -> str | None:
+    """The section ('required', 'optional' or None) after a heading-like line."""
+    if current and _is_sub_intro(line):
+        return current
+    if NICE_TO_HAVE_HEADINGS.search(line):
+        return "optional"
+    if REQUIREMENT_HEADINGS.search(line.lstrip("#").strip()):
+        return "required"
+    return None
+
+
 def _count_section_items(text: str) -> tuple[int, int]:
     """Count items under requirements-style and nice-to-have-style headings.
 
@@ -173,13 +196,8 @@ def _count_section_items(text: str) -> tuple[int, int]:
         line = raw.strip()
         if not line:
             continue
-        if _looks_like_heading(line):
-            if NICE_TO_HAVE_HEADINGS.search(line):
-                section = "optional"
-            elif REQUIREMENT_HEADINGS.search(line.lstrip("#").strip()):
-                section = "required"
-            else:
-                section = None
+        if _looks_like_heading(line) or _is_sub_intro(line):
+            section = next_section(line, section)
             continue
         if section == "required":
             required += 1

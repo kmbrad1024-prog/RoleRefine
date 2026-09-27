@@ -72,6 +72,7 @@ Added in v3, it also warns when the rewrite quietly changes the job in other way
 - The **job title** changes, or a **company or client name** disappears
 - **Accommodation wording** is added to a license, location or travel requirement
 - The rewrite is noticeably **harder to read** than the original
+- The rewrite **adds details** the employer never gave, such as "per month", "temporary", "evenings and weekends" or a perk (added in v3.1)
 
 Testing showed why this matters: on a community organizer posting, prompt v1 removed "long hours and weekends", relocation, the daily commute and the hourly pay type. The fact check flags all of them, and prompt v2 was written to prevent it.
 
@@ -87,7 +88,8 @@ Testing showed why this matters: on a community organizer posting, prompt v1 rem
 - **Working conditions are protected:** hours, travel, relocation, on-site terms, pay type and required equipment can be reworded but never removed. Added in v2 after testing.
 - **Every removal is logged,** and stated years of experience are never changed; inflated ones are flagged as suggestions instead.
 - **Titles, names and requirement levels are protected** (v3): no invented seniority, no dropped client names, preferred stays preferred, duties are moved rather than deleted, and frequencies stay exact.
-- **Versioned and tested:** see [`prompt_versions/`](prompt_versions/). Each version fixes failures found by running the previous one on real postings: v2 stopped dropped working conditions, v3 stopped quieter changes to the job.
+- **Nothing added, nothing softened** (v3.1): the rewrite may not add pay periods, schedules or perks, and duties keep their strength ("drive sales" doesn't become "support efforts to drive sales").
+- **Versioned and tested:** see [`prompt_versions/`](prompt_versions/). Each version fixes failures found by running the previous one on real postings: v2 stopped dropped working conditions, v3 stopped quieter changes to the job, and v3.1 stopped added details.
 
 ## Results
 
@@ -145,7 +147,7 @@ tests/              Unit tests (no API key needed)
 ## Limitations
 
 - This is a writing assistant, not a legal or compliance review. A person should always review the final posting.
-- Word-list scoring is a rough signal: it counts stems without understanding context (e.g. "responsible" matches the feminine-coded stem *respon*).
+- Word-list scoring is a rough signal: it counts stems without understanding context (e.g. "responsible" matches the feminine-coded stem *respon*). It also only counts words from the research lists, so fixes to phrases like "we will win" or "gamble your life" show up in the change log, not the scorecard.
 - The research behind the word lists is on English-language job ads, mostly in North America.
 - The demo-mode result is pre-written to show the interface; live results come from the model.
 - On Gemini's free tier, Google may use inputs to improve its products, so the app asks visitors not to paste confidential postings.

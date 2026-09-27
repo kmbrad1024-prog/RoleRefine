@@ -18,8 +18,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-from scoring import (NICE_TO_HAVE_HEADINGS, REQUIREMENT_HEADINGS, _looks_like_heading,
-                     count_optional, count_required, reading_grade)
+from scoring import (_is_sub_intro, _looks_like_heading, count_optional, count_required,
+                     next_section, reading_grade)
 
 # Each concept: label shown to the user, and a regex. A concept "survives" if the
 # rewrite matches the same regex (so rewording like "weekends" -> "weekend
@@ -53,7 +53,7 @@ MUST_KEEP = {
 NUMBER_FACT = re.compile(
     r"(\$\s?\d[\d,.]*\s?[kK]?(\s?[-–]\s?\$?\s?\d[\d,.]*\s?[kK]?)?"      # pay: $70,000–$85,000
     r"|\d+\+?\s?(-|–|to)?\s?\d*\+?\s?years?"                          # 2+ years, 2-4 years
-    r"|\d+\s?%"                                                       # 30%
+    r"|\d+(?:\.\d+)?\s?%?(?:\s?(?:-|–|to)\s?\d+(?:\.\d+)?)?\s?%"        # 30%, 0.25–0.5%
     r"|\d+\s?(paid )?(vacation |holi)?days?\b"                         # 20 paid vacation days
     r"|\d+\s?(lbs|pounds))",                                          # 50 lbs
     re.IGNORECASE,
@@ -89,6 +89,22 @@ NOT_NAMES = {
     "Equal", "Opportunity", "Employer",
 }
 MIN_NAME_MENTIONS = 2
+
+# Details a rewrite must not add: they're facts about the job, so they can only
+# come from the employer.
+ADDED_DETAILS = [
+    ("pay period", r"\bper (hour|week|month|year|annum)\b|/\s?(hr|hour|mo|month|yr|year)\b"),
+    ("employment type", r"\btemporary\b|\bpart[- ]time\b|\bfull[- ]time\b|\bseasonal\b|"
+                        r"\binternship\b|\bcontract (role|position|basis)\b"),
+    ("schedule", r"\bevenings?\b|(?<!late-)(?<!late )\bnights?\b|\bovernight\b|\bweekends?\b|"
+                 r"\bholidays?\b|\bon[- ]call\b"),
+    ("work arrangement", r"\bremote\b|\bhybrid\b|\bwork from home\b"),
+    ("benefits", r"\b401\s?\(?k\)?|\bdental\b|\bvision (insurance|coverage|plan)\b|\bmedical\b|"
+                 r"\bhealth (insurance|benefits|coverage|plan)\b|\bpto\b|\bpaid time off\b|"
+                 r"\bpaid (vacation|leave|holidays)\b|\bparental leave\b|\bstock options?\b|\bequity\b|"
+                 r"\b(performance |annual |signing |sign-on )?bonus(es)?\b(?! points)|\bteam events?\b|"
+                 r"\bgym\b|\bwellness\b|\bemployee benefits\b|\brelocation (assistance|package|support)\b"),
+]
 
 REQUIREMENTS_KEPT = 0.7       # warn if fewer than 70% of listed qualifications survive
 READABILITY_JUMP = 1.5        # grade levels
@@ -126,7 +142,7 @@ def _logged(term_regex: str, changes: list[dict]) -> bool:
 
 def _number_core(s: str) -> str:
     """'2+ years' -> '2', '$70,000–$85,000' -> '70000 85000': compare the digits only."""
-    return " ".join(re.findall(r"\d+", s.replace(",", "")))
+    return " ".join(n.rstrip(".") for n in re.findall(r"\d+(?:\.\d+)?", s.replace(",", "")))
 
 
 def _content_words(text: str) -> set[str]:
@@ -141,10 +157,8 @@ def _lines_with_sections(text: str) -> list[tuple[str, str | None]]:
         line = raw.strip().lstrip("-*•·●▪◦ ").strip()
         if not line:
             continue
-        if _looks_like_heading(raw.strip()):
-            h = raw.strip().lstrip("#").strip()
-            section = ("optional" if NICE_TO_HAVE_HEADINGS.search(h)
-                       else "required" if REQUIREMENT_HEADINGS.search(h) else None)
+        if _looks_like_heading(raw.strip()) or _is_sub_intro(raw.strip()):
+            section = next_section(raw.strip(), section)
             continue
         out.append((line, section))
     return out
@@ -194,6 +208,10 @@ def _names(text: str) -> dict[str, int]:
     return counts
 
 
+def _short(line: str, limit: int = 90) -> str:
+    return line if len(line) <= limit else line[: limit - 3] + "…"
+
+
 def _title(text: str) -> str:
     for raw in text.splitlines():
         if raw.strip().startswith("#"):
@@ -216,10 +234,12 @@ def check(original: str, rewrite: str, changes: list[dict] | None = None) -> Fac
                     logged=_logged(rx, changes)))
 
     rewrite_numbers = {_number_core(m.group(0)) for m in NUMBER_FACT.finditer(r)}
+    rewrite_tokens = {n for core in rewrite_numbers for n in core.split()}
     seen = set()
     for m in NUMBER_FACT.finditer(o):
         core = _number_core(m.group(0))
-        if not core or core in seen or core in rewrite_numbers:
+        if (not core or core in seen or core in rewrite_numbers
+                or set(core.split()) <= rewrite_tokens):  # e.g. "0.25% – 0.5%" kept as "0.25-0.5%"
             continue
         seen.add(core)
         if _logged(re.escape(_norm(m.group(0))), changes):
@@ -248,11 +268,17 @@ def check(original: str, rewrite: str, changes: list[dict] | None = None) -> Fac
 
     # --- v3 checks: quieter ways a rewrite can change the job ---
 
-    for line in _preferred_made_required(original, rewrite):
-        short = line if len(line) <= 90 else line[:87] + "…"
+    promoted = _preferred_made_required(original, rewrite)
+    if len(promoted) >= 3:
         result.warnings.append(Warning(
-            "requirement level", short,
-            f'The original lists "{short}" as preferred, but the rewrite makes it required.'))
+            "requirement level", f"{len(promoted)} items",
+            f"{len(promoted)} items the original lists as optional or preferred (e.g. "
+            f'"{_short(promoted[0])}") are listed as required in the rewrite.'))
+    else:
+        for line in promoted:
+            result.warnings.append(Warning(
+                "requirement level", _short(line),
+                f'The original lists "{_short(line)}" as preferred, but the rewrite makes it required.'))
 
     before_items = count_required(original) + count_optional(original)
     after_items = count_required(rewrite) + count_optional(rewrite)
@@ -263,7 +289,9 @@ def check(original: str, rewrite: str, changes: list[dict] | None = None) -> Fac
             "Requirements should be moved or reworded, not deleted."))
 
     title = _title(rewrite)
-    if title and title.lower() not in original.lower():
+    # Compare the core title, so "Associate — Palm Harbor, FL (Store #1169)" matches "Associate, Palm Harbor".
+    core_title = re.split(r"\s+[—–|-]\s+|,|\(|\|", title)[0].strip() if title else ""
+    if core_title and _norm(core_title) not in o:
         result.warnings.append(Warning(
             "job title", title,
             f'The rewrite uses the title "{title}", which doesn\'t appear in the original.',
@@ -293,6 +321,16 @@ def check(original: str, rewrite: str, changes: list[dict] | None = None) -> Fac
             "readability", f"grade {grade_before} → {grade_after}",
             f"The rewrite is harder to read than the original (reading grade {grade_before} → "
             f"{grade_after}). Shorter sentences and plainer words would help."))
+
+    for label, rx in ADDED_DETAILS:
+        def terms(text):
+            return {re.sub(r"[\s-]+", " ", m.group(0)) for m in re.finditer(rx, text)}
+        found = sorted(terms(r) - terms(o))
+        if found:
+            result.warnings.append(Warning(
+                "added details", ", ".join(found),
+                f'The rewrite mentions {", ".join(repr(f) for f in found)} ({label}), which the '
+                "original doesn't. Make sure it's accurate, or remove it."))
 
     o_words, r_words = len(o.split()), len(r.split())
     if o_words:
