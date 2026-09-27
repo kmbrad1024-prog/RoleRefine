@@ -409,3 +409,8 @@ def test_fact_check_flags_added_details():
     assert facts == {"per month", "team events", "evenings, weekends"}
     reworded = "Full time role. Salary: about €2,100."
     assert "added details" not in _cats(fact_check("Full-Time role. Salary: about €2,100.", reworded))
+
+
+def test_names_count_whole_words_only():
+    original = "Get shared on Hacker News. We sponsor a newsletter. Newsletter ads too."
+    assert "names" not in _cats(fact_check(original, "Get shared widely. We sponsor newsletters."))
